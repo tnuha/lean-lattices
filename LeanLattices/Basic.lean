@@ -1,5 +1,7 @@
 import Mathlib
 
+-- file makes sporadic use of `Classical` as decidability makes things much easier to reason about
+
 -- ==============================
 -- some basic PartialOrder proofs
 -- ==============================
@@ -49,7 +51,7 @@ inductive Sign where
   | Zero
   | Pos
   | Bot
-  deriving BEq
+  deriving DecidableEq
 
 instance : LE Sign where
   le a b := match a, b with
@@ -63,35 +65,32 @@ instance : LE Sign where
   | _, .Bot => false
   | _, _ => false
 
+-- ≤ is decidable
+open Classical in
+#check if Sign.Top ≤ Sign.Top then 1 else 2
+
+open Sign in
+theorem Sign.le_refl (a : Sign) : a ≤ a := by
+  cases a with
+  | _ => rfl
+
 instance : PartialOrder Sign where
-  le_refl a : a ≤ a := by
-    -- rfl can tell every a is ≤ a case-wise, but you need to introduce the cases.
-    -- i.e. `by rfl` is insufficient
-    cases a with
-    | _ => rfl
+  le_refl := Sign.le_refl
   le_trans (a b c : Sign) (h1 : a ≤ b) (h2 : b ≤ c) : a ≤ c := by
-    match a, b, c with
-    | Sign.Bot, _, Sign.Top
-    | Sign.Bot, _, Sign.Neg
-    | Sign.Bot, _, Sign.Zero
-    | Sign.Bot, _, Sign.Pos
-    | Sign.Bot, _, Sign.Bot
-    | Sign.Pos, _, Sign.Top
-    | Sign.Zero, _, Sign.Top
-    | Sign.Neg, _, Sign.Top
-    | Sign.Top, _, Sign.Top => exact le_of_eq_of_le rfl rfl -- does this make a = b always?
-    -- I don't know what's up with these cases that have ⊥ as c
-    | Sign.Top, Sign.Pos, Sign.Bot
-    | Sign.Top, Sign.Zero, Sign.Bot
-    | Sign.Top, Sign.Neg, Sign.Bot
-    | Sign.Pos, Sign.Neg, Sign.Bot
-    | Sign.Pos, Sign.Zero, Sign.Bot
-    | Sign.Zero, Sign.Neg, Sign.Bot
-    | Sign.Zero, Sign.Pos, Sign.Bot
-    | Sign.Neg, Sign.Pos, Sign.Bot => exact le_of_eq_of_le rfl h1
-    | Sign.Pos, Sign.Pos, Sign.Pos
-    | Sign.Neg, Sign.Neg, Sign.Neg
-    | Sign.Zero, Sign.Zero, Sign.Zero => exact rfl
+    if a = c then {
+      (expose_names; rw [← h])
+      exact Sign.le_refl a
+    } else if a = b then {
+      (expose_names; rw [h_1])
+      exact h2
+    } else if b = c then {
+      (expose_names; rw [← h_2])
+      exact h1
+    } else {
+      match a, b, c with
+      |  .Bot, _, .Top | .Bot, _, .Neg
+      | .Bot, _, .Zero | .Bot, _, .Pos => exact le_of_eq_of_le rfl rfl
+    }
   le_antisymm (a b : Sign) (h1 : a ≤ b) (h2 : b ≤ a) : a = b := by
     match a, b with
     -- match removes obviously contradictory states (!!! this is so cool)
@@ -100,52 +99,49 @@ instance : PartialOrder Sign where
 
 noncomputable example : Set Sign := singleton Sign.Top
 
-instance : CompleteLattice Sign where
+open Sign in
+def sup [DecidableLE Sign] (a b : Sign) : Sign := if a ≤ b then b else a
+
+open Sign in
+def letop [DecidableLE Sign] (a : Sign) : a ≤ .Top := by
+  cases a with
+  | _ => exact le_of_eq_of_le rfl rfl
+open Sign in
+def botle (a : Sign) : .Bot ≤ a := by
+  cases a with
+  | _ => exact le_of_eq_of_le rfl rfl
+
+open Sign in
+lemma le_sup_l [DecidableLE Sign] a b : a ≤ sup a b := by
+  set c := sup a b
+  if a = c then {
+    (expose_names; exact le_of_eq h)
+  } else {
+    sorry
+    -- TODO: wanted to turn this into a match but had a weird issue
+    -- with obviously contradictory orderings; after several hours of debugging,
+    -- decided to go to bed and get back at it later.
+  }
+
+theorem le_sup_r [DecidableLE Sign] a b : b ≤ sup a b := sorry
+
+instance [DecidableLE Sign] : CompleteLattice Sign where
   top := .Top
   bot := .Bot
-  le_top a : a ≤ .Top := by
-    cases a with
-    | _ => exact le_of_eq_of_le rfl rfl
-  bot_le a : .Bot ≤ a := by
-    cases a with
-    | _ => exact le_of_eq_of_le rfl rfl
-  sup a b :=
-    match a, b with
-    | .Top, .Top | .Neg, .Neg | .Zero, .Zero | .Pos, .Pos | .Bot, .Bot => a
-    | .Top, _ | _, .Top => .Top
-    | .Bot, s | s, .Bot => s
-    | _, _ => .Top
-  inf a b :=
-    match a, b with
-    | .Top, .Top | .Neg, .Neg | .Zero, .Zero | .Pos, .Pos | .Bot, .Bot => a
-    | .Top, s | s, .Top => s
-    | .Bot, _ | _, .Bot => .Bot
-    | _, _ => .Bot
-  le_inf (a b c) (h1 : a ≤ b) (h2 : a ≤ c) := by grind =>
-    cases #df5d
-    · instantiate only
-    · instantiate only
-    · instantiate only
-    · instantiate only
-    · instantiate only
-    · instantiate only
-    · instantiate only
-    · instantiate only
-    · instantiate only
-    · sorry
-  sup_le (a b c) (h1 : a ≤ c) (h2 : b ≤ c) := by grind =>
-    cases #711f
-    · instantiate only
-    · instantiate only
-    · instantiate only
-    · instantiate only
-    · instantiate only
-    · instantiate only
-    · instantiate only
-    · instantiate only
-    · instantiate only
-    · sorry
-  -- sSup (s : Set Sign) : Sign :=
-  --   match s with
-  --   | Empty => .Bot
-  --   | singleton a => a
+  le_top := letop
+  bot_le := botle
+  sup := sup
+  le_sup_left := le_sup_l
+  le_sup_right a b := by sorry
+  inf a b := if a ≤ b then a else b
+  inf_le_left a b := by sorry
+  inf_le_right a b := by sorry
+  -- ======================================
+  sSup (s : Set Sign) : Sign := sorry
+  sInf (s : Set Sign) : Sign := sorry
+  le_sSup (s : Set Sign) := sorry
+  sSup_le (s : Set Sign) := sorry
+  sInf_le (s : Set Sign) := sorry
+  le_sInf (s : Set Sign) := sorry
+  le_inf (a b c) (h1 : a ≤ b) (h2 : a ≤ c) := by sorry
+  sup_le (a b c) (h1 : a ≤ c) (h2 : b ≤ c) := by sorry
