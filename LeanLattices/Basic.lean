@@ -20,6 +20,11 @@ noncomputable example [PartialOrder α] (a b : α) (h : a = b ∨ a < b) : a ≤
   rw [@le_iff_eq_or_lt] -- ⊢ a = b ∨ a < b
   exact h
 
+noncomputable example [PartialOrder α] (a b : α) (h : ¬ a ≤ b) : (a = b) ∨ (b ≤ a) := by
+  -- getting tired but this will help with other proofs
+  -- or at least some Prop that looks like this.
+  sorry
+
 -- definition of an upper bound, a term of α relative to a set of α (as a proposition)
 def y_is_upper_bound' [PartialOrder α] (X : Set α) (y : α) := ∀ x ∈ X, x ≤ y
 #check y_is_upper_bound'
@@ -99,8 +104,60 @@ instance : PartialOrder Sign where
 
 noncomputable example : Set Sign := singleton Sign.Top
 
-open Sign in
-def sup [DecidableLE Sign] (a b : Sign) : Sign := if a ≤ b then b else a
+-- ========
+-- sup brah
+-- ========
+
+-- generic proofs when possible make things extensible
+@[reducible]
+def sup [PartialOrder α] [DecidableLE α] (a b : α) := if a ≤ b then b else a
+lemma larger_is_sup [PartialOrder α] [DecidableLE α] (a b : α) (h : a ≤ b) : b = sup a b
+  := by exact Eq.symm (if_pos h)
+lemma larger_is_sup' [PartialOrder α] [DecidableLE α] (a b : α) (h : a ≤ b) : b = sup b a
+  -- idk what's up with this lemma but this should be as easy to prove as `larger_is_sup`
+  := by sorry
+noncomputable example [PartialOrder α] [DecidableLE α] (a : α) : a ≤ sup a a := by
+  rw [← larger_is_sup]
+  rfl
+lemma l_le_r_implies_l_le_sup [PartialOrder α] [DecidableLE α] (a b : α) (h : a ≤ b)
+: a ≤ sup a b := by
+  rw [← larger_is_sup]
+  · exact h
+  · exact h
+lemma supp_symm [PartialOrder α] [DecidableLE α] (a b : α) : sup a b = sup b a := by
+  if h : a ≤ b then {
+    rw [← larger_is_sup]
+    · {
+      rw [← larger_is_sup']
+      exact h
+    }
+    · exact h
+  } else {
+    -- h : ¬ a ≤ b
+    -- want to rewrite h as something like (a = b) ∨ (b ≤ a)
+    sorry
+  }
+
+lemma le_sup_l [PartialOrder α] [DecidableLE α] (a b : α) : a ≤ sup a b := by
+  if h : a ≤ b then {
+    exact l_le_r_implies_l_le_sup a b h
+  } else {
+    -- h : ¬ a ≤ b
+    -- want to rewrite h as something like (a = b) ∨ (b ≤ a)
+    sorry
+  }
+
+lemma le_sup_r [PartialOrder α] [DecidableLE α] (a b : α) : b ≤ sup a b := by
+  rw [supp_symm]
+  exact le_sup_l b a
+
+-- ========
+-- inf brah
+-- TODO: should look nearly identical to sup proofs, ideally anyway
+-- snoop dogg dancing gif
+-- ========
+@[reducible]
+def inf [PartialOrder α] [DecidableLE α] (a b : α) := if a ≤ b then a else b
 
 open Sign in
 def letop [DecidableLE Sign] (a : Sign) : a ≤ .Top := by
@@ -111,20 +168,6 @@ def botle (a : Sign) : .Bot ≤ a := by
   cases a with
   | _ => exact le_of_eq_of_le rfl rfl
 
-open Sign in
-lemma le_sup_l [DecidableLE Sign] a b : a ≤ sup a b := by
-  set c := sup a b
-  if a = c then {
-    (expose_names; exact le_of_eq h)
-  } else {
-    sorry
-    -- TODO: wanted to turn this into a match but had a weird issue
-    -- with obviously contradictory orderings; after several hours of debugging,
-    -- decided to go to bed and get back at it later.
-  }
-
-theorem le_sup_r [DecidableLE Sign] a b : b ≤ sup a b := sorry
-
 instance [DecidableLE Sign] : CompleteLattice Sign where
   top := .Top
   bot := .Bot
@@ -132,8 +175,8 @@ instance [DecidableLE Sign] : CompleteLattice Sign where
   bot_le := botle
   sup := sup
   le_sup_left := le_sup_l
-  le_sup_right a b := by sorry
-  inf a b := if a ≤ b then a else b
+  le_sup_right := le_sup_r
+  inf := inf
   inf_le_left a b := by sorry
   inf_le_right a b := by sorry
   -- ======================================
